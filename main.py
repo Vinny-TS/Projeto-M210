@@ -9,63 +9,93 @@ from simplex import (
     simplex_tableau,
 )
 from simplex.solver import normalize_constraint
+from simplex.variables import aggregate_solution, expand_problem
+
+
+def parse_float(text: str) -> float | None:
+    cleaned = text.strip()
+    if cleaned == "":
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
 def build_objective_inputs(num_vars: int, title: str, key_prefix: str):
     st.subheader(title)
     cols = st.columns(num_vars)
     objective = []
+    errors = []
     for i in range(num_vars):
-        objective.append(
-            cols[i].number_input(
-                f"Coeficiente de x{i+1}",
-                value=0.0,
-                format="%.6f",
-                key=f"{key_prefix}_obj_x{i+1}",
-            )
+        raw = cols[i].text_input(
+            f"Coeficiente de x{i+1}",
+            value="",
+            placeholder="",
+            key=f"{key_prefix}_obj_x{i+1}",
         )
-    return objective
+        val = parse_float(raw)
+        if val is None:
+            errors.append(f"Coeficiente de x{i+1}")
+            val = 0.0
+        objective.append(val)
+    return objective, errors
 
 
 def build_constraints(num_vars: int, num_constraints: int, key_prefix: str):
     st.subheader("Restricoes")
     constraints = []
+    errors = []
     for r in range(num_constraints):
         cols = st.columns(num_vars + 3)
-        coeffs = [
-            cols[c].number_input(
+        coeffs = []
+        for c in range(num_vars):
+            raw = cols[c].text_input(
                 f"r{r+1} - coef x{c+1}",
-                value=0.0,
-                format="%.6f",
+                value="",
+                placeholder="",
                 key=f"{key_prefix}_r{r+1}_x{c+1}",
             )
-            for c in range(num_vars)
-        ]
+            val = parse_float(raw)
+            if val is None:
+                errors.append(f"r{r+1} coef x{c+1}")
+                val = 0.0
+            coeffs.append(val)
         sense = cols[num_vars].selectbox(
             f"r{r+1} sinal",
             options=["<=", ">=", "="],
             index=0,
             key=f"{key_prefix}_sense_{r}",
         )
-        rhs = cols[num_vars + 1].number_input(
+        rhs_raw = cols[num_vars + 1].text_input(
             f"r{r+1} lado direito",
-            value=0.0,
-            format="%.6f",
+            value="",
+            placeholder="",
             key=f"{key_prefix}_rhs_{r}",
         )
-        variation = cols[num_vars + 2].number_input(
+        rhs_val = parse_float(rhs_raw)
+        if rhs_val is None:
+            errors.append(f"r{r+1} lado direito")
+            rhs_val = 0.0
+
+        var_raw = cols[num_vars + 2].text_input(
             f"r{r+1} variacao desejada (Delta b)",
-            value=0.0,
-            format="%.6f",
+            value="",
+            placeholder="",
             key=f"{key_prefix}_var_{r}",
         )
-        constraints.append(ConstraintInput(coeffs, sense, rhs, variation))
-    return constraints
+        var_val = parse_float(var_raw)
+        if var_val is None:
+            errors.append(f"r{r+1} Delta b")
+            var_val = 0.0
+
+        constraints.append(ConstraintInput(coeffs, sense, rhs_val, var_val))
+    return constraints, errors
 
 
-def show_solution(result: SimplexResult, num_vars: int):
-    st.write(f"Valor otimo: **{format_value(result.optimal_value, 6)}**")
-    sol_table = [{"Variavel": f"x{i+1}", "Valor otimo": format_value(result.solution.get(f"x{i+1}", 0.0), 6)} for i in range(num_vars)]
+def show_solution(opt_value: float, values: list):
+    st.write(f"Valor otimo: **{format_value(opt_value, 6)}**")
+    sol_table = [{"Variavel": f"x{i+1}", "Valor otimo": format_value(val, 6)} for i, val in enumerate(values)]
     st.table(sol_table)
 
 
@@ -108,20 +138,36 @@ def main():
     st.sidebar.header("Configuracoes")
     num_vars = st.sidebar.slider("Numero de variaveis (x)", min_value=2, max_value=4, value=3)
     num_constraints = st.sidebar.slider("Numero de restricoes", min_value=2, max_value=6, value=3)
+    st.sidebar.subheader("Sinal das variaveis")
+    nonneg_flags = []
+    for i in range(num_vars):
+        choice = st.sidebar.selectbox(
+            f"x{i+1}",
+            options=["x >= 0", "x livre"],
+            index=0,
+            key=f"var_sign_{i}",
+        )
+        nonneg_flags.append(choice == "x >= 0")
 
     tab_max, tab_min = st.tabs(["Maximizacao", "Minimizacao"])
 
     with tab_max:
-        objective = build_objective_inputs(num_vars, "Funcao objetivo (maximizar)", key_prefix="max")
-        constraints = build_constraints(num_vars, num_constraints, key_prefix="max")
+        objective, errors_obj = build_objective_inputs(num_vars, "Funcao objetivo (maximizar)", key_prefix="max")
+        constraints, errors_cons = build_constraints(num_vars, num_constraints, key_prefix="max")
         if st.button("Resolver (Max)", key="solve_max"):
+            errors = errors_obj + errors_cons
+            if errors:
+                st.error("Preencha valores numericos validos: " + ", ".join(errors))
+                st.stop()
             with st.spinner("Executando Simplex (maximizacao)..."):
-                result = simplex_tableau(objective, constraints, maximize=True)
+                exp_c, exp_constraints, mapping = expand_problem(objective, constraints, nonneg_flags)
+                result = simplex_tableau(exp_c, exp_constraints, maximize=True)
+            orig_values = aggregate_solution(result.solution, mapping)
             st.subheader("Resultado")
             st.write(result.message)
             if result.status == "optimal":
                 st.success("Solucao otima encontrada.")
-                show_solution(result, num_vars)
+                show_solution(result.optimal_value, orig_values)
                 show_shadow_prices(constraints, result, num_vars)
                 show_tableau(result)
             elif result.status == "unbounded":
@@ -134,16 +180,23 @@ def main():
                     st.info("Variavel artificial permaneceu positiva; ajuste os dados do problema.")
 
     with tab_min:
-        objective_min = build_objective_inputs(num_vars, "Funcao objetivo (minimizar)", key_prefix="min")
-        constraints_min = build_constraints(num_vars, num_constraints, key_prefix="min")
+        objective_min, errors_obj_min = build_objective_inputs(num_vars, "Funcao objetivo (minimizar)", key_prefix="min")
+        constraints_min, errors_cons_min = build_constraints(num_vars, num_constraints, key_prefix="min")
         if st.button("Resolver (Min)", key="solve_min"):
+            errors = errors_obj_min + errors_cons_min
+            if errors:
+                st.error("Preencha valores numericos validos: " + ", ".join(errors))
+                st.stop()
             with st.spinner("Executando Simplex (minimizacao via dualidade)..."):
-                result = simplex_tableau(objective_min, constraints_min, maximize=False)
+                exp_c, exp_constraints, mapping = expand_problem(objective_min, constraints_min, nonneg_flags)
+                result = simplex_tableau(exp_c, exp_constraints, maximize=False)
+            orig_values = aggregate_solution(result.solution, mapping)
             st.subheader("Resultado")
             st.write(result.message)
             if result.status == "optimal":
                 st.success("Solucao otima encontrada.")
-                show_solution(result, num_vars)
+                # valor otimo do problema de minimizacao = -valor do maximo transformado
+                show_solution(-result.optimal_value, orig_values)
                 show_shadow_prices(constraints_min, result, num_vars)
                 show_tableau(result)
             elif result.status == "unbounded":

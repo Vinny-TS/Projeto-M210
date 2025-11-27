@@ -90,13 +90,14 @@ def simplex_tableau(c: List[float], constraints: List[ConstraintInput], maximize
     if artificial_count > 0:
         art_start = num_vars + slack_count
         for j in range(artificial_count):
-            obj_row[art_start + j] = -BIG_M
+            obj_row[art_start + j] = -BIG_M  # penaliza artificiais (max)
 
     tableau[-1, :] = obj_row
 
+    # Ajusta objetivo para artificiais basicas
     for row_idx, var_idx in enumerate(basis):
         if var_idx >= num_vars + slack_count:  # artificial na base
-            tableau[-1, :] += BIG_M * tableau[row_idx, :]
+            tableau[-1, :] += BIG_M * tableau[row_idx, :]  # zera custo e move constante
 
     iteration = 0
     max_iter = 200
@@ -122,9 +123,21 @@ def simplex_tableau(c: List[float], constraints: List[ConstraintInput], maximize
             break
 
         reduced_costs = tableau[-1, :-1]
-        entering = int(np.argmin(reduced_costs))
-        if reduced_costs[entering] >= -TOL:
+        negative_cols = [idx for idx, val in enumerate(reduced_costs) if val < -TOL]
+        if not negative_cols:
             break  # otimo
+
+        entering = None
+        for idx in negative_cols:
+            col_vals = tableau[:m, idx]
+            if np.any(col_vals > TOL):
+                entering = idx
+                break
+
+        if entering is None:
+            status = "unbounded"
+            message = "Problema ilimitado (nenhuma coluna negativa com entrada positiva)."
+            break
 
         ratios = []
         for i in range(m):
