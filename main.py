@@ -11,30 +11,60 @@ from simplex import (
 from simplex.solver import normalize_constraint
 
 
-def build_objective_inputs(num_vars: int):
-    st.subheader("Funcao objetivo (maximizar)")
+def build_objective_inputs(num_vars: int, title: str, key_prefix: str):
+    st.subheader(title)
     cols = st.columns(num_vars)
     objective = []
     for i in range(num_vars):
-        objective.append(cols[i].number_input(f"Coeficiente de x{i+1}", value=0.0, format="%.6f"))
+        objective.append(
+            cols[i].number_input(
+                f"Coeficiente de x{i+1}",
+                value=0.0,
+                format="%.6f",
+                key=f"{key_prefix}_obj_x{i+1}",
+            )
+        )
     return objective
 
 
-def build_constraints(num_vars: int, num_constraints: int):
+def build_constraints(num_vars: int, num_constraints: int, key_prefix: str):
     st.subheader("Restricoes")
     constraints = []
     for r in range(num_constraints):
         cols = st.columns(num_vars + 3)
-        coeffs = [cols[c].number_input(f"r{r+1} - coef x{c+1}", value=0.0, format="%.6f") for c in range(num_vars)]
-        sense = cols[num_vars].selectbox(f"r{r+1} sinal", options=["<=", ">=", "="], index=0, key=f"sense_{r}")
-        rhs = cols[num_vars + 1].number_input(f"r{r+1} lado direito", value=0.0, format="%.6f")
-        variation = cols[num_vars + 2].number_input(f"r{r+1} variacao desejada (Delta b)", value=0.0, format="%.6f")
+        coeffs = [
+            cols[c].number_input(
+                f"r{r+1} - coef x{c+1}",
+                value=0.0,
+                format="%.6f",
+                key=f"{key_prefix}_r{r+1}_x{c+1}",
+            )
+            for c in range(num_vars)
+        ]
+        sense = cols[num_vars].selectbox(
+            f"r{r+1} sinal",
+            options=["<=", ">=", "="],
+            index=0,
+            key=f"{key_prefix}_sense_{r}",
+        )
+        rhs = cols[num_vars + 1].number_input(
+            f"r{r+1} lado direito",
+            value=0.0,
+            format="%.6f",
+            key=f"{key_prefix}_rhs_{r}",
+        )
+        variation = cols[num_vars + 2].number_input(
+            f"r{r+1} variacao desejada (Delta b)",
+            value=0.0,
+            format="%.6f",
+            key=f"{key_prefix}_var_{r}",
+        )
         constraints.append(ConstraintInput(coeffs, sense, rhs, variation))
     return constraints
 
 
 def show_solution(result: SimplexResult, num_vars: int):
-    st.write(f"Lucro otimo: **{format_value(result.optimal_value, 6)}**")
+    st.write(f"Valor otimo: **{format_value(result.optimal_value, 6)}**")
     sol_table = [{"Variavel": f"x{i+1}", "Valor otimo": format_value(result.solution.get(f"x{i+1}", 0.0), 6)} for i in range(num_vars)]
     st.table(sol_table)
 
@@ -79,29 +109,51 @@ def main():
     num_vars = st.sidebar.slider("Numero de variaveis (x)", min_value=2, max_value=4, value=3)
     num_constraints = st.sidebar.slider("Numero de restricoes", min_value=2, max_value=6, value=3)
 
-    objective = build_objective_inputs(num_vars)
-    constraints = build_constraints(num_vars, num_constraints)
+    tab_max, tab_min = st.tabs(["Maximizacao", "Minimizacao"])
 
-    if st.button("Resolver"):
-        with st.spinner("Executando Simplex..."):
-            result = simplex_tableau(objective, constraints)
+    with tab_max:
+        objective = build_objective_inputs(num_vars, "Funcao objetivo (maximizar)", key_prefix="max")
+        constraints = build_constraints(num_vars, num_constraints, key_prefix="max")
+        if st.button("Resolver (Max)", key="solve_max"):
+            with st.spinner("Executando Simplex (maximizacao)..."):
+                result = simplex_tableau(objective, constraints, maximize=True)
+            st.subheader("Resultado")
+            st.write(result.message)
+            if result.status == "optimal":
+                st.success("Solucao otima encontrada.")
+                show_solution(result, num_vars)
+                show_shadow_prices(constraints, result, num_vars)
+                show_tableau(result)
+            elif result.status == "unbounded":
+                st.error("Problema ilimitado.")
+            elif result.status == "infeasible":
+                st.error("Problema inviavel.")
+            else:
+                st.warning("Algoritmo nao convergiu dentro do limite de iteracoes.")
+                if result.artificial_in_basis:
+                    st.info("Variavel artificial permaneceu positiva; ajuste os dados do problema.")
 
-        st.subheader("Resultado")
-        st.write(result.message)
-
-        if result.status == "optimal":
-            st.success("Solucao otima encontrada.")
-            show_solution(result, num_vars)
-            show_shadow_prices(constraints, result, num_vars)
-            show_tableau(result)
-        elif result.status == "unbounded":
-            st.error("Problema ilimitado.")
-        elif result.status == "infeasible":
-            st.error("Problema inviavel.")
-        else:
-            st.warning("Algoritmo nao convergiu dentro do limite de iteracoes.")
-            if result.artificial_in_basis:
-                st.info("Variavel artificial permaneceu positiva; ajuste os dados do problema.")
+    with tab_min:
+        objective_min = build_objective_inputs(num_vars, "Funcao objetivo (minimizar)", key_prefix="min")
+        constraints_min = build_constraints(num_vars, num_constraints, key_prefix="min")
+        if st.button("Resolver (Min)", key="solve_min"):
+            with st.spinner("Executando Simplex (minimizacao via dualidade)..."):
+                result = simplex_tableau(objective_min, constraints_min, maximize=False)
+            st.subheader("Resultado")
+            st.write(result.message)
+            if result.status == "optimal":
+                st.success("Solucao otima encontrada.")
+                show_solution(result, num_vars)
+                show_shadow_prices(constraints_min, result, num_vars)
+                show_tableau(result)
+            elif result.status == "unbounded":
+                st.error("Problema ilimitado.")
+            elif result.status == "infeasible":
+                st.error("Problema inviavel.")
+            else:
+                st.warning("Algoritmo nao convergiu dentro do limite de iteracoes.")
+                if result.artificial_in_basis:
+                    st.info("Variavel artificial permaneceu positiva; ajuste os dados do problema.")
 
 
 if __name__ == "__main__":

@@ -71,9 +71,12 @@ def build_standard_form(num_vars: int, constraints: List[ConstraintInput]) -> Tu
     return a_std, b, var_names, basis, slack_count, artificial_count
 
 
-def simplex_tableau(c: List[float], constraints: List[ConstraintInput]) -> SimplexResult:
-    """Executa o Simplex (maximizacao) com Big-M em forma de tableau."""
+def simplex_tableau(c: List[float], constraints: List[ConstraintInput], maximize: bool = True) -> SimplexResult:
+    """Executa o Simplex com Big-M em forma de tableau. Se minimize, converte para max."""
     num_vars = len(c)
+    c = list(c)  # copia defensiva
+    if not maximize:
+        c = [-coef for coef in c]  # min -> max
     a_std, b_std, var_names, basis, slack_count, artificial_count = build_standard_form(num_vars, constraints)
 
     m, total_cols = a_std.shape

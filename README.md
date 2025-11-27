@@ -21,12 +21,15 @@ python -m pip install -r requirements.txt
 
 ## Fluxo de uso
 1. Na barra lateral, escolha o numero de variaveis (2 a 4) e de restricoes.
-2. Preencha os coeficientes da funcao objetivo (maximizacao) e das restricoes:
+2. Selecione a aba:
+   - **Maximizacao**: resolve o problema original.
+   - **Minimizacao**: converte para maximizacao (multiplica a funcao objetivo por -1) e resolve.
+3. Preencha os coeficientes da funcao objetivo e das restricoes:
    - Selecione o sinal de cada restricao (`<=`, `>=` ou `=`).
    - Informe o lado direito (b).
    - Informe a variacao desejada em b (Delta b) para analisar viabilidade e novo lucro via preco-sombra.
-3. Clique em **Resolver**.
-4. A interface mostra:
+4. Clique em **Resolver** na aba correspondente.
+5. A interface mostra:
    - Mensagem de status (otimo, ilimitado, inviavel ou limite de iteracoes).
    - Lucro otimo e valores das variaveis de decisao.
    - Precos-sombra de cada restricao, se a alteracao Delta b e viavel, novo lucro (quando viavel) e a faixa de Delta b onde o preco-sombra permanece valido.
