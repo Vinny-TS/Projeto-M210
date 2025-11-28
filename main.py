@@ -13,6 +13,7 @@ from simplex.variables import aggregate_solution, expand_problem
 
 
 def parse_float(text: str) -> float | None:
+    """Converte texto para float; retorna None se vazio ou invalido."""
     cleaned = text.strip()
     if cleaned == "":
         return None
@@ -23,6 +24,7 @@ def parse_float(text: str) -> float | None:
 
 
 def build_objective_inputs(num_vars: int, title: str, key_prefix: str):
+    """Renderiza inputs da funcao objetivo e coleta coeficientes com validacao simples."""
     st.subheader(title)
     cols = st.columns(num_vars)
     objective = []
@@ -43,6 +45,7 @@ def build_objective_inputs(num_vars: int, title: str, key_prefix: str):
 
 
 def build_constraints(num_vars: int, num_constraints: int, key_prefix: str):
+    """Renderiza inputs das restricoes, coletando coeficientes, sinal, RHS e Delta b."""
     st.subheader("Restricoes")
     constraints = []
     errors = []
@@ -94,12 +97,14 @@ def build_constraints(num_vars: int, num_constraints: int, key_prefix: str):
 
 
 def show_solution(opt_value: float, values: list):
+    """Exibe valor otimo e tabela de variaveis de decisao."""
     st.write(f"Valor otimo: **{format_value(opt_value, 6)}**")
     sol_table = [{"Variavel": f"x{i+1}", "Valor otimo": format_value(val, 6)} for i, val in enumerate(values)]
     st.table(sol_table)
 
 
 def show_shadow_prices(constraints, result, num_vars):
+    """Calcula e mostra precos-sombra e viabilidade de variacoes em b."""
     st.subheader("Precos-sombra e analise de variacoes")
     variations = [normalize_constraint(c.coefficients, c.sense, c.rhs, c.variation)[3] for c in constraints]
     rows = sensitivity_ranges(result, variations, num_vars)
@@ -124,6 +129,7 @@ def show_shadow_prices(constraints, result, num_vars):
 
 
 def show_tableau(result: SimplexResult):
+    """Mostra o tableau final para referencia."""
     st.subheader("Tableau final")
     st.dataframe(np.array(result.tableau))
 

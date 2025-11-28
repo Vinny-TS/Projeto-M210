@@ -16,8 +16,8 @@ def expand_problem(
     if len(nonneg_flags) != len(c):
         raise ValueError("Tamanho de nonneg_flags deve ser igual ao numero de variaveis.")
 
-    expanded_c: List[float] = []
-    mapping: List[Tuple[int, ...]] = []
+    expanded_c: List[float] = []  # coeficientes da funcao objetivo apos expandir variaveis livres
+    mapping: List[Tuple[int, ...]] = []  # mapeia cada variavel original para indices expandidos
 
     # prepara listas para novos coeficientes por restricao
     new_coeffs_matrix = [[] for _ in constraints]
@@ -25,13 +25,14 @@ def expand_problem(
     next_idx = 0
     for j, (coef_obj, nonneg) in enumerate(zip(c, nonneg_flags)):
         if nonneg:
+            # Variavel ja nao-negativa: apenas propaga coeficiente
             expanded_c.append(coef_obj)
             mapping.append((next_idx,))
             for row_idx, cons in enumerate(constraints):
                 new_coeffs_matrix[row_idx].append(cons.coefficients[j])
             next_idx += 1
         else:
-            # x_j livre = x_j_pos - x_j_neg
+            # Variavel livre vira diferenca de duas nao-negativas: x_j = x_pos - x_neg
             expanded_c.extend([coef_obj, -coef_obj])
             mapping.append((next_idx, next_idx + 1))
             for row_idx, cons in enumerate(constraints):
